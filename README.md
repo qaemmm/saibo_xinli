@@ -1,3 +1,7 @@
+# 欢迎使用你的秒哒应用代码包
+秒哒应用链接
+    URL:https://www.miaoda.cn/projects/app-8fg4m9n7c0e9
+
 ## 介绍
 
 赛博疗愈师是一个基于传统命理数据的AI心理咨询与视觉疗愈系统，利用Gemini 3 Pro的强大能力为用户提供个性化心理咨询服务。
