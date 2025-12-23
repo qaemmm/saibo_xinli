@@ -1,7 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '@/db/supabase';
 import type { User } from '@supabase/supabase-js';
-import type { Profile } from '@/types/types';
+
+// 定义Profile类型（如果需要的话）
+export interface Profile {
+  id: string;
+  username?: string;
+  email?: string;
+  [key: string]: unknown;
+}
 
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
@@ -101,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signInWithUsername, signUpWithUsername, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn: signInWithUsername, signUp: signUpWithUsername, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
