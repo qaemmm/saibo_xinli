@@ -33,13 +33,16 @@ export async function validateRedeemCode(code: string): Promise<RedeemCodeValida
  */
 export async function generateReport(
   baziData: BaziData,
-  emotionText: string
+  emotionText: string,
+  options?: { nickname?: string; timeUnknown?: boolean }
 ): Promise<{ success: boolean; report?: string; error?: string }> {
   try {
     const { data, error } = await supabase.functions.invoke('generate-report', {
       body: {
         baziData,
-        emotionText
+        emotionText,
+        nickname: options?.nickname,
+        timeUnknown: options?.timeUnknown ?? false
       }
     });
 

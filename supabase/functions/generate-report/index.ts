@@ -17,6 +17,8 @@ interface RequestBody {
     xiyongshen: string;
   };
   emotionText: string;
+  nickname?: string;
+  timeUnknown?: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -26,7 +28,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { baziData, emotionText }: RequestBody = await req.json();
+    const { baziData, emotionText, nickname, timeUnknown }: RequestBody = await req.json();
 
     // 获取Gemini API密钥
     const apiKey = Deno.env.get('GEMINI_API_KEY');
@@ -36,9 +38,14 @@ Deno.serve(async (req) => {
 
     // 初始化Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
 
     // 构建提示词
+    const greeting = nickname ? `称呼：${nickname}` : '称呼：未提供';
+    const timeNote = timeUnknown
+      ? '时辰未知：本次不分析晚年和子女相关内容，重点放在性格与当下困惑。'
+      : '时辰已知：可以正常分析四柱结构。';
+
     const prompt = `你是一位融合了传统命理智慧与现代心理学的赛博疗愈师。请基于以下信息，生成一份深度疗愈报告：
 
 【命理数据】
@@ -47,6 +54,8 @@ Deno.serve(async (req) => {
 - 日主：${baziData.rizhu}
 - 五行分布：${JSON.stringify(baziData.wuxing)}
 - 喜用神：${baziData.xiyongshen}
+- ${greeting}
+- ${timeNote}
 
 【当下情绪】
 ${emotionText}

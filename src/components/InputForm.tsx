@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
 import { Loader2, Sparkles } from 'lucide-react';
@@ -15,10 +16,10 @@ import { validateRedeemCode, generateReport } from '@/services/api';
 import type { BaziData } from '@/types/types';
 
 interface FormData {
-  year: string;
-  month: string;
-  day: string;
+  nickname: string;
+  date: string;
   hour: string;
+  timeUnknown: boolean;
   gender: string;
   emotionText: string;
   redeemCode: string;
@@ -35,10 +36,10 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
 
   const form = useForm<FormData>({
     defaultValues: {
-      year: '',
-      month: '',
-      day: '',
+      nickname: '',
+      date: '',
       hour: '12',
+      timeUnknown: false,
       gender: 'male',
       emotionText: '',
       redeemCode: ''
@@ -79,11 +80,16 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
       return;
     }
 
-    // 验证日期
-    const year = parseInt(data.year);
-    const month = parseInt(data.month);
-    const day = parseInt(data.day);
-    const hour = parseInt(data.hour);
+    if (!data.date) {
+      toast.error('请选择出生日期');
+      return;
+    }
+
+    const [yearStr, monthStr, dayStr] = data.date.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10);
+    const day = parseInt(dayStr, 10);
+    const hour = data.timeUnknown ? 12 : parseInt(data.hour, 10);
 
     if (year < 1900 || year > 2100) {
       toast.error('请输入有效的年份（1900-2100）');
@@ -100,6 +106,11 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
       return;
     }
 
+    if (!data.timeUnknown && (hour < 0 || hour > 23)) {
+      toast.error('请选择有效的小时（0-23）');
+      return;
+    }
+
     if (!data.emotionText.trim()) {
       toast.error('请描述您当下的情绪状态');
       return;
@@ -109,10 +120,20 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
 
     try {
       // 计算八字
-      const baziData = calculateBazi(year, month, day, hour, data.gender);
+      const baziData = await calculateBazi(
+        year,
+        month,
+        day,
+        hour,
+        data.gender,
+        data.timeUnknown
+      );
 
       // 生成报告
-      const result = await generateReport(baziData, data.emotionText);
+      const result = await generateReport(baziData, data.emotionText, {
+        nickname: data.nickname,
+        timeUnknown: data.timeUnknown
+      });
 
       if (result.success && result.report) {
         onReportGenerated(result.report, baziData);
@@ -174,47 +195,36 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
               </div>
             </div>
 
+            {/* 称呼 */}
+            <FormField
+              control={form.control}
+              name="nickname"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>称呼（选填）</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="怎么称呼你？" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
             {/* 出生日期 */}
             <div className="space-y-4">
               <Label>出生日期</Label>
-              <div className="grid grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="year"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input {...field} type="number" placeholder="年" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="month"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input {...field} type="number" placeholder="月" min="1" max="12" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="day"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input {...field} type="number" placeholder="日" min="1" max="31" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Input {...field} type="date" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
             {/* 出生时辰 */}
@@ -226,26 +236,35 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
                   <FormLabel>出生时辰</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger disabled={form.watch('timeUnknown')}>
                         <SelectValue placeholder="选择时辰" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="0">子时 (23:00-01:00)</SelectItem>
-                      <SelectItem value="2">丑时 (01:00-03:00)</SelectItem>
-                      <SelectItem value="4">寅时 (03:00-05:00)</SelectItem>
-                      <SelectItem value="6">卯时 (05:00-07:00)</SelectItem>
-                      <SelectItem value="8">辰时 (07:00-09:00)</SelectItem>
-                      <SelectItem value="10">巳时 (09:00-11:00)</SelectItem>
-                      <SelectItem value="12">午时 (11:00-13:00)</SelectItem>
-                      <SelectItem value="14">未时 (13:00-15:00)</SelectItem>
-                      <SelectItem value="16">申时 (15:00-17:00)</SelectItem>
-                      <SelectItem value="18">酉时 (17:00-19:00)</SelectItem>
-                      <SelectItem value="20">戌时 (19:00-21:00)</SelectItem>
-                      <SelectItem value="22">亥时 (21:00-23:00)</SelectItem>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {String(i).padStart(2, '0')} 时
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="timeUnknown"
+              render={({ field }) => (
+                <FormItem className="flex items-center space-x-2">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={(checked) => field.onChange(checked === true)}
+                    />
+                  </FormControl>
+                  <FormLabel className="leading-none">时辰未知</FormLabel>
                 </FormItem>
               )}
             />
@@ -278,17 +297,17 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
               )}
             />
 
-            {/* 情绪文本 */}
+            {/* 当下困惑 */}
             <FormField
               control={form.control}
               name="emotionText"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>当下情绪</FormLabel>
+                  <FormLabel>当下的困惑</FormLabel>
                   <FormControl>
                     <Textarea
                       {...field}
-                      placeholder="请描述您当下的情绪状态、困惑或想要探索的问题..."
+                      placeholder="此刻最困扰你的问题是什么？"
                       className="min-h-32 resize-none"
                     />
                   </FormControl>

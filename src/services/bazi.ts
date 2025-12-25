@@ -20,16 +20,57 @@ const WUXING_MAP: Record<string, string> = {
   '子': '水', '亥': '水'
 };
 
+const BAZI_API_URL = import.meta.env.VITE_BAZI_API_URL as string | undefined;
+
 /**
- * 计算八字
+ * 计算八字（优先使用后端 Python lunar_python 服务）
  */
-export function calculateBazi(
+export async function calculateBazi(
   year: number,
   month: number,
   day: number,
   hour: number,
-  gender: string
+  gender: string,
+  timeUnknown: boolean
+): Promise<BaziData> {
+  const normalizedHour = timeUnknown ? 12 : hour;
+
+  if (BAZI_API_URL) {
+    const response = await fetch(`${BAZI_API_URL}/bazi`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        year,
+        month,
+        day,
+        hour: normalizedHour,
+        gender,
+        time_unknown: timeUnknown
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Bazi API request failed');
+    }
+
+    const data = (await response.json()) as BaziData;
+    return data;
+  }
+
+  return calculateBaziLocal(year, month, day, normalizedHour, gender, timeUnknown);
+}
+
+function calculateBaziLocal(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  gender: string,
+  timeUnknown: boolean
 ): BaziData {
+  const normalizedHour = timeUnknown ? 12 : hour;
   // 使用solarlunar库获取农历信息
   const lunar = solarlunar.solar2lunar(year, month, day);
   
@@ -50,7 +91,7 @@ export function calculateBazi(
   const dayPillar = dayGan + dayZhi;
 
   // 获取时柱
-  const hourZhiIndex = Math.floor((hour + 1) / 2) % 12;
+  const hourZhiIndex = Math.floor((normalizedHour + 1) / 2) % 12;
   const hourZhi = DIZHI[hourZhiIndex];
   const hourGanIndex = (TIANGAN.indexOf(dayGan) * 2 + hourZhiIndex) % 10;
   const hourGan = TIANGAN[hourGanIndex];
