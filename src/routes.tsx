@@ -1,4 +1,5 @@
 import HomePage from './pages/HomePage';
+import AuthPage from './pages/AuthPage';
 import type { ReactNode } from 'react';
 
 interface RouteConfig {
@@ -10,8 +11,13 @@ interface RouteConfig {
 
 const routes: RouteConfig[] = [
   {
-    name: '赛博疗愈师',
+    name: '授权验证',
     path: '/',
+    element: <AuthPage />
+  },
+  {
+    name: '赛博疗愈师',
+    path: '/home',
     element: <HomePage />
   }
 ];

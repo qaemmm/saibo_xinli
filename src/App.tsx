@@ -13,7 +13,7 @@ const App: React.FC = () => {
     <Router>
       {/*<AuthProvider>*/}
       {/*<RouteGuard>*/}
-      <div className="flex flex-col min-h-screen">
+      <div className="flex flex-col min-h-screen dark">
         {/*<Header />*/}
         <main className="flex-grow">
           <Routes>

@@ -1,118 +1,143 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { calculateBazi } from '@/services/bazi';
-import { validateRedeemCode, generateReport } from '@/services/api';
 import type { BaziData } from '@/types/types';
 
 interface FormData {
   nickname: string;
-  date: string;
+  year: string;
+  month: string;
+  day: string;
   hour: string;
   timeUnknown: boolean;
   gender: string;
-  emotionText: string;
-  redeemCode: string;
 }
 
 interface InputFormProps {
-  onReportGenerated: (report: string, baziData: BaziData) => void;
+  onBaziGenerated: (baziData: BaziData) => void;
 }
 
-export default function InputForm({ onReportGenerated }: InputFormProps) {
-  const [isValidating, setIsValidating] = useState(false);
+// localStorage 缓存键名
+const CACHE_KEY = 'bazi_form_cache';
+
+// 从 localStorage 加载缓存数据
+const loadCachedData = (): Partial<FormData> | null => {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (error) {
+    console.error('加载缓存失败:', error);
+  }
+  return null;
+};
+
+// 保存数据到 localStorage
+const saveCachedData = (data: FormData) => {
+  try {
+    // 只缓存基本信息，不缓存敏感数据
+    const cacheData = {
+      nickname: data.nickname,
+      year: data.year,
+      month: data.month,
+      day: data.day,
+      hour: data.hour,
+      timeUnknown: data.timeUnknown,
+      gender: data.gender
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+  } catch (error) {
+    console.error('保存缓存失败:', error);
+  }
+};
+
+// 清除缓存
+const clearCachedData = () => {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+  } catch (error) {
+    console.error('清除缓存失败:', error);
+  }
+};
+
+export default function InputForm({ onBaziGenerated }: InputFormProps) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [codeValidated, setCodeValidated] = useState(false);
+
+  // 加载缓存数据
+  const cachedData = loadCachedData();
 
   const form = useForm<FormData>({
     defaultValues: {
-      nickname: '',
-      date: '',
-      hour: '12',
-      timeUnknown: false,
-      gender: 'male',
-      emotionText: '',
-      redeemCode: ''
+      nickname: cachedData?.nickname || '',
+      year: cachedData?.year || '',
+      month: cachedData?.month || '',
+      day: cachedData?.day || '',
+      hour: cachedData?.hour || '12',
+      timeUnknown: cachedData?.timeUnknown || false,
+      gender: cachedData?.gender || 'male'
     }
   });
 
-  // 验证兑换码
-  const handleValidateCode = async () => {
-    const code = form.getValues('redeemCode');
-    
-    if (!code.trim()) {
-      toast.error('请输入兑换码');
-      return;
-    }
-
-    setIsValidating(true);
-    
-    try {
-      const result = await validateRedeemCode(code);
-      
-      if (result.success) {
-        setCodeValidated(true);
-        toast.success(result.message);
-      } else {
-        toast.error(result.message);
+  // 监听表单变化，自动保存到缓存
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      if (value.year || value.month || value.day) {
+        saveCachedData(value as FormData);
       }
-    } catch (error) {
-      toast.error('验证失败，请稍后重试');
-    } finally {
-      setIsValidating(false);
-    }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
+  // 清除缓存并重置表单
+  const handleClearCache = () => {
+    clearCachedData();
+    form.reset({
+      nickname: '',
+      year: '',
+      month: '',
+      day: '',
+      hour: '12',
+      timeUnknown: false,
+      gender: 'male'
+    });
+    toast.success('缓存已清除');
   };
 
-  // 生成报告
+  // 生成排盘
   const handleSubmit = async (data: FormData) => {
-    if (!codeValidated) {
-      toast.error('请先验证兑换码');
-      return;
-    }
-
-    if (!data.date) {
-      toast.error('请选择出生日期');
-      return;
-    }
-
-    const [yearStr, monthStr, dayStr] = data.date.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
-    const day = parseInt(dayStr, 10);
+    const year = parseInt(data.year, 10);
+    const month = parseInt(data.month, 10);
+    const day = parseInt(data.day, 10);
     const hour = data.timeUnknown ? 12 : parseInt(data.hour, 10);
 
-    if (year < 1900 || year > 2100) {
+    if (!year || year < 1900 || year > 2100) {
       toast.error('请输入有效的年份（1900-2100）');
       return;
     }
 
-    if (month < 1 || month > 12) {
+    if (!month || month < 1 || month > 12) {
       toast.error('请输入有效的月份（1-12）');
       return;
     }
 
-    if (day < 1 || day > 31) {
+    if (!day || day < 1 || day > 31) {
       toast.error('请输入有效的日期（1-31）');
       return;
     }
 
     if (!data.timeUnknown && (hour < 0 || hour > 23)) {
       toast.error('请选择有效的小时（0-23）');
-      return;
-    }
-
-    if (!data.emotionText.trim()) {
-      toast.error('请描述您当下的情绪状态');
       return;
     }
 
@@ -129,81 +154,39 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
         data.timeUnknown
       );
 
-      // 生成报告
-      const result = await generateReport(baziData, data.emotionText, {
-        nickname: data.nickname,
-        timeUnknown: data.timeUnknown
-      });
-
-      if (result.success && result.report) {
-        onReportGenerated(result.report, baziData);
-        toast.success('报告生成成功！');
-      } else {
-        toast.error(result.error || '生成报告失败');
-      }
+      onBaziGenerated(baziData);
+      toast.success('八字排盘完成！');
     } catch (error) {
-      console.error('生成报告错误:', error);
-      toast.error('生成报告时发生错误');
+      console.error('排盘错误:', error);
+      toast.error('排盘时发生错误');
     } finally {
       setIsGenerating(false);
     }
   };
 
   return (
-    <Card className="w-full max-w-2xl mx-auto card-hover">
-      <CardHeader>
-        <CardTitle className="text-2xl gradient-text flex items-center gap-2">
-          <Sparkles className="w-6 h-6" />
-          开启疗愈之旅
+    <Card className="w-full max-w-2xl mx-auto card-hover bg-card/70 backdrop-blur border-border/50">
+      <CardHeader className="text-center">
+        <CardTitle className="text-3xl gradient-text flex items-center justify-center gap-2">
+          <Sparkles className="w-7 h-7" />
+          八字排盘
         </CardTitle>
-        <CardDescription>
-          请填写您的基本信息，让我们为您生成专属的疗愈报告
+        <CardDescription className="text-base mt-2">
+          填写出生信息，AI自动排盘并分析
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-            {/* 兑换码验证 */}
-            <div className="space-y-2">
-              <Label htmlFor="redeemCode">兑换码</Label>
-              <div className="flex gap-2">
-                <FormField
-                  control={form.control}
-                  name="redeemCode"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="请输入兑换码"
-                          disabled={codeValidated}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button
-                  type="button"
-                  onClick={handleValidateCode}
-                  disabled={isValidating || codeValidated}
-                  variant={codeValidated ? 'secondary' : 'default'}
-                >
-                  {isValidating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {codeValidated ? '已验证' : '验证'}
-                </Button>
-              </div>
-            </div>
-
-            {/* 称呼 */}
+            {/* 姓名 */}
             <FormField
               control={form.control}
               name="nickname"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>称呼（选填）</FormLabel>
+                  <FormLabel className="text-base">姓名（可选）</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="怎么称呼你？" />
+                    <Input {...field} placeholder="请输入姓名" className="h-11" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -211,32 +194,79 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
             />
 
             {/* 出生日期 */}
-            <div className="space-y-4">
-              <Label>出生日期</Label>
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Input {...field} type="date" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <div className="space-y-3">
+              <Label className="text-base">出生日期（公历）</Label>
+              <div className="grid grid-cols-3 gap-3">
+                <FormField
+                  control={form.control}
+                  name="year"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          placeholder="年"
+                          min="1900"
+                          max="2100"
+                          className="h-11"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="month"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          placeholder="月"
+                          min="1"
+                          max="12"
+                          className="h-11"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="day"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          placeholder="日"
+                          min="1"
+                          max="31"
+                          className="h-11"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             </div>
 
-            {/* 出生时辰 */}
+            {/* 出生时间 */}
             <FormField
               control={form.control}
               name="hour"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>出生时辰</FormLabel>
+                  <FormLabel className="text-base">出生时间</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
-                      <SelectTrigger disabled={form.watch('timeUnknown')}>
+                      <SelectTrigger disabled={form.watch('timeUnknown')} className="h-11">
                         <SelectValue placeholder="选择时辰" />
                       </SelectTrigger>
                     </FormControl>
@@ -257,14 +287,16 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
               control={form.control}
               name="timeUnknown"
               render={({ field }) => (
-                <FormItem className="flex items-center space-x-2">
+                <FormItem className="flex items-center space-x-2 space-y-0">
                   <FormControl>
                     <Checkbox
                       checked={field.value}
                       onCheckedChange={(checked) => field.onChange(checked === true)}
                     />
                   </FormControl>
-                  <FormLabel className="leading-none">时辰未知</FormLabel>
+                  <FormLabel className="leading-none text-sm font-normal cursor-pointer">
+                    时间不详（系统将使用中午12点）
+                  </FormLabel>
                 </FormItem>
               )}
             />
@@ -275,7 +307,7 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
               name="gender"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>性别</FormLabel>
+                  <FormLabel className="text-base">性别</FormLabel>
                   <FormControl>
                     <RadioGroup
                       onValueChange={field.onChange}
@@ -284,11 +316,11 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
                     >
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="male" id="male" />
-                        <Label htmlFor="male">男</Label>
+                        <Label htmlFor="male" className="cursor-pointer">男</Label>
                       </div>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="female" id="female" />
-                        <Label htmlFor="female">女</Label>
+                        <Label htmlFor="female" className="cursor-pointer">女</Label>
                       </div>
                     </RadioGroup>
                   </FormControl>
@@ -297,38 +329,42 @@ export default function InputForm({ onReportGenerated }: InputFormProps) {
               )}
             />
 
-            {/* 当下困惑 */}
-            <FormField
-              control={form.control}
-              name="emotionText"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>当下的困惑</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      {...field}
-                      placeholder="此刻最困扰你的问题是什么？"
-                      className="min-h-32 resize-none"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             {/* 提交按钮 */}
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={!codeValidated || isGenerating}
-            >
-              {isGenerating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {isGenerating ? '正在生成报告...' : '生成疗愈报告'}
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                type="submit"
+                className="flex-1 h-12 text-base font-medium"
+                size="lg"
+                disabled={isGenerating}
+              >
+                {isGenerating && <Loader2 className="w-5 h-5 mr-2 animate-spin" />}
+                {isGenerating ? '正在排盘...' : '✨ 开始排盘'}
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 px-4"
+                onClick={handleClearCache}
+                disabled={isGenerating}
+                title="清除缓存数据"
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                💡 提示：AI会根据您的出生信息自动进行八字排盘，
+                <br />
+                全程加密处理，数据不会被保存
+              </p>
+            </div>
           </form>
         </Form>
       </CardContent>
     </Card>
   );
 }
+

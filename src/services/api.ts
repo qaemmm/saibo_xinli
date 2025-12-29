@@ -1,5 +1,5 @@
 import { supabase } from '@/db/supabase';
-import type { BaziData, RedeemCodeValidation } from '@/types/types';
+import type { BaziData, RedeemCodeValidation, VisualReportData } from '@/types/types';
 
 /**
  * 验证兑换码
@@ -34,7 +34,7 @@ export async function validateRedeemCode(code: string): Promise<RedeemCodeValida
 export async function generateReport(
   baziData: BaziData,
   emotionText: string,
-  options?: { nickname?: string; timeUnknown?: boolean }
+  options?: { nickname?: string; timeUnknown?: boolean; redeemCode?: string }
 ): Promise<{ success: boolean; report?: string; error?: string }> {
   try {
     const { data, error } = await supabase.functions.invoke('generate-report', {
@@ -42,7 +42,8 @@ export async function generateReport(
         baziData,
         emotionText,
         nickname: options?.nickname,
-        timeUnknown: options?.timeUnknown ?? false
+        timeUnknown: options?.timeUnknown ?? false,
+        redeemCode: options?.redeemCode
       }
     });
 
@@ -68,6 +69,56 @@ export async function generateReport(
     };
   } catch (error) {
     console.error('生成报告异常:', error);
+    return {
+      success: false,
+      error: '网络错误，请检查连接'
+    };
+  }
+}
+
+/**
+ * 生成可视化报告
+ */
+export async function generateVisualReport(
+  baziData: BaziData,
+  emotionText: string,
+  options?: { nickname?: string; timeUnknown?: boolean; redeemCode?: string }
+): Promise<{ success: boolean; visualReport?: VisualReportData; error?: string; rawText?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-report', {
+      body: {
+        baziData,
+        emotionText,
+        nickname: options?.nickname,
+        timeUnknown: options?.timeUnknown ?? false,
+        redeemCode: options?.redeemCode,
+        outputFormat: 'visual'
+      }
+    });
+
+    if (error) {
+      const errorMsg = await error?.context?.text();
+      console.error('生成可视化报告错误:', errorMsg || error?.message);
+      return {
+        success: false,
+        error: errorMsg || error?.message || '生成可视化报告失败'
+      };
+    }
+
+    if (!data.success) {
+      return {
+        success: false,
+        error: data.error || '生成可视化报告失败',
+        rawText: data.rawText
+      };
+    }
+
+    return {
+      success: true,
+      visualReport: data.visualReport
+    };
+  } catch (error) {
+    console.error('生成可视化报告异常:', error);
     return {
       success: false,
       error: '网络错误，请检查连接'

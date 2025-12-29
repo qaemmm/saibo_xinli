@@ -1,8 +1,21 @@
 import { GoogleGenerativeAI } from "npm:@google/generative-ai@0.21.0";
+import { buildPrompt } from "./prompt-template.ts";
+import { buildVisualPrompt } from "./prompt-visual.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const sanitizeReport = (text: string) => {
+  const replacements: Array<[RegExp, string]> = [
+    [/改运/g, '调整方向'],
+    [/改命/g, '自我调整']
+  ];
+
+  return replacements.reduce((result, [pattern, replacement]) => {
+    return result.replace(pattern, replacement);
+  }, text);
 };
 
 interface RequestBody {
@@ -19,73 +32,119 @@ interface RequestBody {
   emotionText: string;
   nickname?: string;
   timeUnknown?: boolean;
+  redeemCode?: string;
+  outputFormat?: 'text' | 'visual';
 }
 
 Deno.serve(async (req) => {
-  // 处理CORS预检请求
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const { baziData, emotionText, nickname, timeUnknown }: RequestBody = await req.json();
+    const { baziData, emotionText, nickname, timeUnknown, redeemCode, outputFormat = 'text' }: RequestBody =
+      await req.json();
 
-    // 获取Gemini API密钥
+    if (!redeemCode) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: '缺少兑换码'
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
+        }
+      );
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured');
+    }
+
+    const redeemResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/consume_redeem_code`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: serviceRoleKey,
+        Authorization: `Bearer ${serviceRoleKey}`
+      },
+      body: JSON.stringify({ p_code: redeemCode })
+    });
+
+    if (!redeemResponse.ok) {
+      throw new Error('兑换码验证失败');
+    }
+
+    const redeemResult = await redeemResponse.json();
+    if (!redeemResult.success) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: redeemResult.message || '兑换码无效'
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
+        }
+      );
+    }
+
     const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY not configured');
     }
 
-    // 初始化Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-pro-preview" });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
-    // 构建提示词
-    const greeting = nickname ? `称呼：${nickname}` : '称呼：未提供';
+    const greeting = nickname ? `代号：${nickname}` : '代号：迷途旅人';
     const timeNote = timeUnknown
-      ? '时辰未知：本次不分析晚年和子女相关内容，重点放在性格与当下困惑。'
-      : '时辰已知：可以正常分析四柱结构。';
+      ? '注意：时柱数据丢失，请忽略晚年运势分析，聚焦于灵魂底色与当下状态。'
+      : '数据完整：四柱全息扫描完成。';
 
-    const prompt = `你是一位融合了传统命理智慧与现代心理学的赛博疗愈师。请基于以下信息，生成一份深度疗愈报告：
+    const prompt = outputFormat === 'visual'
+      ? buildVisualPrompt({ baziData, emotionText, greeting, timeNote })
+      : buildPrompt({ baziData, emotionText, greeting, timeNote });
 
-【命理数据】
-- 出生信息：${baziData.year}年${baziData.month}月${baziData.day}日${baziData.hour}时
-- 性别：${baziData.gender}
-- 日主：${baziData.rizhu}
-- 五行分布：${JSON.stringify(baziData.wuxing)}
-- 喜用神：${baziData.xiyongshen}
-- ${greeting}
-- ${timeNote}
-
-【当下情绪】
-${emotionText}
-
-请按照以下结构生成报告，每个部分都要深入、具体、有洞察力：
-
-## 一、能量原型
-基于日主和五行分布，描述此人的核心能量特质、天赋潜能和生命主题。用诗意而精准的语言，揭示其灵魂的本质。
-
-## 二、光与影
-分析五行的平衡与失衡，指出其性格中的"光明面"（优势、天赋）和"阴影面"（挑战、盲点）。要温柔而诚实，帮助其看见完整的自己。
-
-## 三、当下回应
-结合喜用神和当前情绪文本，分析当下的生命课题和内在需求。给予共情式的理解和支持，让对方感到被看见、被理解。
-
-## 四、行动处方
-提供3-5条具体可行的疗愈建议，包括：
-- 情绪调节方法
-- 生活方式调整
-- 能量平衡练习
-- 关系模式优化
-每条建议都要结合命理特质，具有个性化和可操作性。
-
-请用温暖、专业、富有诗意的语言撰写，让报告既有深度又易于理解，既有命理依据又贴近现代生活。`;
-
-    // 调用Gemini生成报告
     const result = await model.generateContent(prompt);
     const response = result.response;
-    const reportText = response.text();
+    const rawText = response.text();
 
+    if (outputFormat === 'visual') {
+      try {
+        const jsonText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const visualData = JSON.parse(jsonText);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            visualReport: visualData,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        );
+      } catch (parseError) {
+        console.error('JSON解析失败:', parseError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'AI返回的数据格式不正确',
+            rawText: rawText
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500,
+          }
+        );
+      }
+    }
+
+    const reportText = sanitizeReport(rawText);
     return new Response(
       JSON.stringify({
         success: true,

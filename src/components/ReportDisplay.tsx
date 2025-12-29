@@ -21,10 +21,18 @@ export default function ReportDisplay({ report, baziData }: ReportDisplayProps) 
     };
 
     // 使用正则表达式提取各个部分
-    const energyMatch = text.match(/##\s*一、能量原型\s*([\s\S]*?)(?=##\s*二、|$)/);
-    const lightMatch = text.match(/##\s*二、光与影\s*([\s\S]*?)(?=##\s*三、|$)/);
-    const responseMatch = text.match(/##\s*三、当下回应\s*([\s\S]*?)(?=##\s*四、|$)/);
-    const actionMatch = text.match(/##\s*四、行动处方\s*([\s\S]*?)$/);
+    const energyMatch = text.match(
+      /##\s*(?:一、|01\.\s*\/\/\/\s*)(?:能量原型|源代码解码)[\s\S]*?\n([\s\S]*?)(?=##\s*(?:二、|02\.\s*\/\/\/\s*)|$)/
+    );
+    const lightMatch = text.match(
+      /##\s*(?:二、|02\.\s*\/\/\/\s*)(?:光与影|系统Bug与天赋)[\s\S]*?\n([\s\S]*?)(?=##\s*(?:三、|03\.\s*\/\/\/\s*)|$)/
+    );
+    const responseMatch = text.match(
+      /##\s*(?:三、|03\.\s*\/\/\/\s*)(?:当下回应|宇宙的回信)[\s\S]*?\n([\s\S]*?)(?=##\s*(?:四、|04\.\s*\/\/\/\s*)|$)/
+    );
+    const actionMatch = text.match(
+      /##\s*(?:四、|04\.\s*\/\/\/\s*)(?:行动处方|能量补丁)[\s\S]*?\n([\s\S]*?)$/
+    );
 
     if (energyMatch) sections.energyArchetype = energyMatch[1].trim();
     if (lightMatch) sections.lightAndShadow = lightMatch[1].trim();
@@ -38,67 +46,37 @@ export default function ReportDisplay({ report, baziData }: ReportDisplayProps) 
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6">
-      {/* 八字信息卡片 */}
+      {/* 时间信息卡片 */}
       <Card className="card-hover glow-effect">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 gradient-text">
             <Sparkles className="w-5 h-5" />
-            您的命理信息
+            您的时间信息
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">年柱</p>
-              <p className="text-lg font-semibold">{baziData.year}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">月柱</p>
-              <p className="text-lg font-semibold">{baziData.month}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">日柱</p>
-              <p className="text-lg font-semibold">{baziData.day}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">时柱</p>
-              <p className="text-lg font-semibold">{baziData.hour}</p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">五行分布</p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(baziData.wuxing).map(([element, count]) => (
-                <Badge key={element} variant={count === 0 ? 'outline' : 'secondary'}>
-                  {element}: {count}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">日主</p>
-              <p className="text-lg font-semibold gradient-gold">{baziData.rizhu}</p>
+              <p className="text-sm text-muted-foreground">能量流向</p>
+              <p className="text-lg font-semibold">
+                {baziData.gender === 'male' ? '男' : '女'}
+              </p>
             </div>
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">喜用神</p>
-              <p className="text-lg font-semibold gradient-gold">{baziData.xiyongshen}</p>
+              <p className="text-sm text-muted-foreground">时间坐标</p>
+              <p className="text-lg font-semibold">已接收</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 能量原型 */}
+      {/* 源代码解码 */}
       {sections.energyArchetype && (
         <Card className="card-hover">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-primary">
               <Zap className="w-5 h-5" />
-              一、能量原型
+              01. 源代码解码
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -111,7 +89,7 @@ export default function ReportDisplay({ report, baziData }: ReportDisplayProps) 
         </Card>
       )}
 
-      {/* 光与影 */}
+      {/* 系统Bug与天赋 */}
       {sections.lightAndShadow && (
         <Card className="card-hover">
           <CardHeader>
@@ -120,7 +98,7 @@ export default function ReportDisplay({ report, baziData }: ReportDisplayProps) 
                 <Sun className="w-5 h-5" />
                 <Moon className="w-5 h-5" />
               </div>
-              二、光与影
+              02. 系统Bug与天赋
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -133,13 +111,13 @@ export default function ReportDisplay({ report, baziData }: ReportDisplayProps) 
         </Card>
       )}
 
-      {/* 当下回应 */}
+      {/* 宇宙的回信 */}
       {sections.currentResponse && (
         <Card className="card-hover">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-primary">
               <Heart className="w-5 h-5" />
-              三、当下回应
+              03. 宇宙的回信
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -152,13 +130,13 @@ export default function ReportDisplay({ report, baziData }: ReportDisplayProps) 
         </Card>
       )}
 
-      {/* 行动处方 */}
+      {/* 能量补丁 */}
       {sections.actionPrescription && (
         <Card className="card-hover border-accent">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 gradient-gold">
               <Sparkles className="w-5 h-5" />
-              四、行动处方
+              04. 能量补丁
             </CardTitle>
           </CardHeader>
           <CardContent>
